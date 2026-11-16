@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import time
+import hashlib
+import hmac
+import secrets
 from typing import Any
 
 MAX_ATTEMPTS = 3
@@ -17,6 +20,7 @@ attempts: dict[str, int] = {}
 blocked_until: dict[str, float] = {}
 
 GENERIC_ERROR = "Identifiants incorrects"
+PBKDF2_ITERATIONS = 600_000
 
 
 def _valid_username(username: Any) -> bool:
@@ -32,13 +36,35 @@ def _valid_password(password: Any) -> bool:
 
 
 def _hash_password(password: str) -> str:
-    """Prepare the password for storage (simplified version)."""
-    
-    return password
+    """Hash a password with a random salt using PBKDF2-HMAC-SHA256."""
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt,
+        PBKDF2_ITERATIONS,
+    )
+    return f"pbkdf2_sha256${PBKDF2_ITERATIONS}${salt.hex()}${digest.hex()}"
 
 
 def _verify_password(password: str, encoded_hash: str) -> bool:
-    return password == encoded_hash
+    try:
+        algorithm, iterations_text, salt_hex, digest_hex = encoded_hash.split("$")
+        if algorithm != "pbkdf2_sha256":
+            return False
+        iterations = int(iterations_text)
+        salt = bytes.fromhex(salt_hex)
+        expected_digest = bytes.fromhex(digest_hex)
+    except (TypeError, ValueError):
+        return False
+
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt,
+        iterations,
+    )
+    return hmac.compare_digest(digest, expected_digest)
 
 
 def register_user(username: Any, password: Any) -> bool:
@@ -80,7 +106,7 @@ def authenticate(username: Any, password: Any) -> dict[str, Any]:
 
 def _record_failure(username: str, now: float) -> None:
     attempts[username] = attempts.get(username, 0) + 1
-    if attempts[username] > MAX_ATTEMPTS:
+    if attempts[username] >= MAX_ATTEMPTS:
         blocked_until[username] = now + LOCKOUT_SECONDS
 
 
