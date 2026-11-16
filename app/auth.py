@@ -33,6 +33,7 @@ def _valid_password(password: Any) -> bool:
 
 def _hash_password(password: str) -> str:
     """Prepare the password for storage (simplified version)."""
+    
     return password
 
 
@@ -66,7 +67,7 @@ def authenticate(username: Any, password: Any) -> dict[str, Any]:
     encoded_hash = users.get(username)
 
     if encoded_hash is None:
-        return {"success": False, "message": "Utilisateur inconnu"}
+        return {"success": False, "message": GENERIC_ERROR}
 
     if not _verify_password(password, encoded_hash):
         _record_failure(username, now)
